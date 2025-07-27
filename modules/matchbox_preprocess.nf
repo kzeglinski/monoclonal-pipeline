@@ -1,46 +1,38 @@
-"""
-# rotate
-count!('total reads')
-if read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
-       	count!('rotated')
-        rotated = before.concat(after)
-       	# extract H and L
-       	if rotated is [_ TTATTACTCGCTGCCCAACCAGCCATGGCC heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-               	count!('heavy')
-               	if rotated is
-                       	[_ CTGGCTGGTTTCGCTACGGCCGTGCAGGCA light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                               	count!('heavy + kappa')
-                               	heavy.out!('heavy.fasta')
-                               	light.out!('light.fasta')
-                       	}
-                       	[_ CTGGCTGGTTTCGCTACGGCCGTGCAGGCA light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                               	count!('heavy + lambda')
-                               	heavy.out!('heavy.fasta')
-                               	light.out!('light.fasta')
-                       	}
-       	}
-}
+process matchbox_preprocess {
+    tag { meta.well }
+    label 'process_low'
+	publishDir "${params.out_dir}/qc", pattern: "*.tsv",  mode: 'copy', failOnError: true
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'library://kzeglinski/nanologix/matchbox:v0.0.1' :
+        'MAKE A DOCKER CONTAINER!!!!' }"
 
-# for the reverse complement
-# rotate
-if -read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
-       	count!('rc rotated')
-        rotated = before.concat(after)
-       	# extract H and L
-       	if rotated is [_ TTATTACTCGCTGCCCAACCAGCCATGGCC heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-               	count!('rc heavy')
-               	if rotated is
-                       	[_ CTGGCTGGTTTCGCTACGGCCGTGCAGGCA light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                               	count!('rc heavy + kappa')
-                               	heavy.out!('heavy.fasta')
-                               	light.out!('light.fasta')
-                       	}
-                       	[_ CTGGCTGGTTTCGCTACGGCCGTGCAGGCA light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                               	count!('rc heavy + lambda')
-                               	heavy.out!('heavy.fasta')
-                               	light.out!('light.fasta')
-                       	}
-       	}
-}
+	input:
+    tuple val(meta), path(reads)
+	val(flanks)
+	val(rotate_sequence)
+	val(vector_type)
+    
+    output:
+    tuple val(meta), path('*_extracted.fasta'), emit: preprocessed_reads, optional: true
+	path("*.tsv"), emit: qc_numbers
 
-"""
+	script:
+	"""
+	# need to edit this to use the flanking sequences from file and rotate sequence
+	matchbox \
+		--script "$projectDir/scripts/${vector_type}_preprocess.mb" \
+		-e 0.2 \
+		--args "seqid='${meta.well}'" \
+		$reads > "${meta.well}_preprocess_qc.tsv" 
+
+	# cat output files (e.g. if heavy and light chain)
+	myarray=(`find ./ -maxdepth 1 -name "*.fasta"`)
+	if [ \${#myarray[@]} -gt 0 ]; then 
+    	cat ./*.fasta > "${meta.well}_extracted.fasta"
+	else 
+    	echo "no antibody sequences detected"
+	fi
+	
+	"""
+
+}
