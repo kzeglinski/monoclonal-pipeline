@@ -1,8 +1,8 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
-    "$id": "https://raw.githubusercontent.com/YOUR_PIPELINE/master/nextflow_schema.json",
+    "$id": "https://raw.githubusercontent.com/kzeglinski/monoclonal-pipeline/refs/heads/main/nextflow_schema.json",
     "title": "Nextflow pipeline parameters",
-    "description": "This pipeline uses Nextflow and processes some kind of data. The JSON Schema was built using the nf-core pipeline schema builder.",
+    "description": "Monoclonal plate based ONT antibody sequencing pipeline parameters",
     "type": "object",
     "definitions": {
         "main_parameters": {
@@ -14,18 +14,15 @@
                 "fastq_dir": {
                     "type": "string",
                     "description": "The directory containing your .fastq files",
-                    "format": "directory-path",
                     "help_text": "Usually this is the path to the fastq_pass folder that contains a folder for each barcode, with arbitrarily many fastqs inside each barcode folder"
                 },
                 "out_dir": {
                     "type": "string",
-                    "description": "Directory to write the output to",
-                    "format": "directory-path"
+                    "description": "Directory to write the output to"
                 },
                 "sample_sheet": {
                     "type": "string",
                     "description": "Path to your sample sheet",
-                    "format": "file-path",
                     "help_text": "format of the sample sheet should be barcode,well,sample_name,notes; where notes are either 'Empty Well' or 'irrelevant phage'"
                 },
                 "vector_type": {
@@ -49,20 +46,17 @@
             "properties": {
                 "igblast_databases": {
                     "type": "string",
-                    "description": "Location of IgBLAST databases for annotation",
-                    "format": "directory-path"
+                    "description": "Location of IgBLAST databases for annotation"
                 },
                 "irrelevant_reference": {
                     "type": "string",
                     "description": "FASTA reference for the irrelevant phage control",
-                    "format": "file-path",
                     "default": "$projectDir/references/irrelevant_ref.fa"
                 },
                 "flanking_sequences": {
                     "type": "string",
                     "description": "Path to the flanking sequence file for extraction of VH/VL",
-                    "default": "$projectDir/references/flanking.csv",
-                    "format": "file-path"
+                    "default": "$projectDir/references/flanking.csv"
                 },
                 "rotate_sequence": {
                     "type": "string",
@@ -71,13 +65,5 @@
                 }
             }
         }
-    },
-    "allOf": [
-        {
-            "$ref": "#/$defs/main_parameters"
-        },
-        {
-            "$ref": "#/$defs/advanced_settings"
-        }
-    ]
+    }
 }
