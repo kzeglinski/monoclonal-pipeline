@@ -3,8 +3,8 @@ process matchbox_preprocess {
     label 'process_low'
 	publishDir "${params.out_dir}/qc", pattern: "*.tsv",  mode: 'copy', failOnError: true
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'library://kzeglinski/nanologix/matchbox:v0.0.1' :
-        'MAKE A DOCKER CONTAINER!!!!' }"
+        'ghcr.io/kzeglinski/matchbox:0.1.0' :
+        'ghcr.io/kzeglinski/matchbox:0.1.0' }"
 
 	input:
     tuple val(meta), path(reads)
