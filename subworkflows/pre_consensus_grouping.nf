@@ -3,7 +3,7 @@ include { igblast } from '../modules/igblast'
 process group_reads {
     tag { meta.well }
     label 'process_low'
-    publishDir "${params.out_dir}/qc", mode: 'copy', pattern: "*.tsv"
+    //publishDir "${params.out_dir}/qc", mode: 'copy', pattern: "*.csv"
 
     conda (params.enable_conda ? 'conda-forge::r-tidyverse=2.0.0' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -15,7 +15,7 @@ process group_reads {
 
     output:
     tuple val(meta), path("*_heavy_clean.fasta"), path("*_light_clean.fasta"), emit: consensus_input, optional: true
-    path("*_qc.tsv"), emit: qc
+    tuple val(meta), path("*_qc.csv"), emit: qc
 
     script:
     """
@@ -23,6 +23,7 @@ process group_reads {
 
     library(tidyverse)
     id <- '$meta.well'
+    
     annotation <- read_tsv(
         fs::dir_ls(glob = "*_pre_consensus_igblast.tsv"),
         col_select = c(sequence_id, complete_vdj, v_call, 
@@ -30,7 +31,7 @@ process group_reads {
         # for writing out the fasta later
         mutate(sequence_id = paste0(">", sequence_id)) %>%
         # remove abnormally long sequences, they mess up consensus
-        filter(nchar(sequence) < 500)
+        filter(nchar(sequence) < 1000)
 
     # heavy chains
     heavy <- annotation %>%
@@ -69,28 +70,39 @@ process group_reads {
     }
 
     if ((main_heavy * 0.15 < second_heavy) | (main_light * 0.15 < second_light)){
-        status <- "not monoclonal"
+        if (main_heavy < 25 | main_light < 25){
+            status <- "potentially monoclonal"
+        } else {
+            status <- "not monoclonal"
+        }
+        
     } else {
         status <- "normal"
-        # write out the heavy and light reads for consensus
-        ungroup(heavy) %>% 
-            slice_head(n = 1) %>% 
-            pull(reads) %>%
-            write_lines(file = paste0(id, "_heavy_clean.fasta"))
-
-        ungroup(light) %>% 
-            slice_head(n = 1) %>% 
-            pull(reads) %>%
-            write_lines(file = paste0(id, "_light_clean.fasta"))
     }
 
+    # write out the heavy and light reads for consensus
+    ungroup(heavy) %>% 
+        slice_head(n = 1) %>% 
+        pull(reads) %>%
+        write_lines(file = paste0(id, "_heavy_clean.fasta"))
+
+    ungroup(light) %>% 
+        slice_head(n = 1) %>% 
+        pull(reads) %>%
+        write_lines(file = paste0(id, "_light_clean.fasta"))
+
     monoclonal_status <- data.frame(
-        id = id,
+        barcode = '$meta.barcode',
+        well = id,
+        sample_id = '$meta.sample_id',
+        notes = '$meta.notes',
         status = status,
-        heavy_counts = paste(main_heavy, second_heavy, sep = "_"),
-        light_counts = paste(main_light, second_light, sep = "_")
+        main_heavy_counts = main_heavy,
+        second_heavy_counts = second_heavy,
+        main_light_counts = main_light,
+        second_light_counts = second_light
     )
-    write_tsv(monoclonal_status, paste0(id, "_monoclonal_qc.tsv"))
+    write_csv(monoclonal_status, paste0(id, "_monoclonal_qc.csv"))
     """
 }
 

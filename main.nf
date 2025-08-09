@@ -11,6 +11,8 @@ include { matchbox_preprocess } from './modules/matchbox_preprocess'
 include { pre_consensus_grouping } from './subworkflows/pre_consensus_grouping'
 include { abpoa } from './modules/abpoa'
 include { igblast } from './modules/igblast'
+include { combine_consensus_seqs } from './modules/cat_outputs.nf'
+include { combine_csvs } from './modules/cat_outputs.nf'
 
 /*
  * Run the workflow
@@ -67,21 +69,16 @@ workflow {
     grouped_reads = pre_consensus_grouping(pp_reads_w_igblast_data)
     consensus_input = grouped_reads.consensus_input
     monoclonal_qc = grouped_reads.qc
+    monoclonal_qc.map{it -> it[1]}.collect().set{for_combining_csv}
+    combine_csvs(for_combining_csv)
 
     // consensus calling
     consensus = abpoa(consensus_input)
+    consensus.map{it -> it[1]}.collect().set{for_combining_fasta}
+    combine_consensus_seqs(for_combining_fasta) // combine them all
     
     // post-consensus annotation
-    // just take the combined H/L fasta
-    consensus.map{it -> 
-        def meta = it[0]
-        def comb_cons = it[3]
-        return tuple(meta, comb_cons)
-    }
-    .combine(igblast_databases)
-    .set { for_final_annot }
-
-    //for_final_annot.view()
+    consensus.combine(igblast_databases).set{ for_final_annot }
 
     final_annotation = igblast(for_final_annot, "post")
 

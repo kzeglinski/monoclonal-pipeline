@@ -29,6 +29,9 @@ Optional (only needed for advanced users)
     System.exit(0)
   }
 
+fastq_dir = params.fastq_dir ?: "not provided"
+tar_path = params.tar_path ?: "not provided"
+
 log.info """
   ,-^-.   
   |\\/\\|    monoclonal nanobody sequencing
@@ -39,7 +42,8 @@ log.info """
  .-;":-.
 ,'|  `; \
 
-read directory  : ${params.fastq_dir}
+input reads dir : ${fastq_dir}
+input tar file  : ${tar_path}
 sample sheet    : ${params.sample_sheet}
 output directory: ${params.out_dir}
 vector_type     : ${params.vector_type}

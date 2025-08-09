@@ -1,7 +1,7 @@
 process abpoa {
     tag { meta.well }
     label 'process_medium'
-    publishDir "${params.out_dir}/consensus", mode: 'copy'
+    publishDir "${params.out_dir}/consensus", mode: 'copy', pattern: '*_consensus.fasta'
 
     conda (params.enable_conda ? 'bioconda::abpoa=1.5.4' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -12,7 +12,7 @@ process abpoa {
     tuple val(meta), path(heavy), path(light)
 
     output:
-    tuple val(meta), path("*_consensus_heavy.fasta"), path("*_consensus_heavy.fasta"), path("*_consensus.fasta"), emit: consensus_seq
+    tuple val(meta), path("*_consensus.fasta"), emit: consensus_seq
 
     script:
 
