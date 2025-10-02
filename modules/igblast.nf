@@ -4,11 +4,11 @@ process igblast {
     tag { meta.well }
     label 'process_high'
     publishDir "${params.out_dir}/original_igblast", mode: 'copy'
-        conda (params.enable_conda ? 'bioconda::igblast=1.19.0' : null)
+        conda (params.enable_conda ? 'bioconda::igblast=1.22.0' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'oras://community.wave.seqera.io/library/igblast:7cbf716402092613' :
-        'community.wave.seqera.io/library/igblast:9e55bf6484824037' }"
-
+        'oras://community.wave.seqera.io/library/igblast:1.22.0--3588511b44218582' :
+        'community.wave.seqera.io/library/igblast:1.22.0--df7afc24896f633e' }"
+    
     input:
     tuple val(meta), path(reads), path(igblast_databases)
     val pre_post
@@ -30,7 +30,7 @@ process igblast {
         -organism human \
         -query $reads \
         -num_threads $task.cpus \
-        -auxiliary_data "\${PWD}/igblast/igdata/optional_file/human_gl.aux" \
+        -auxiliary_data "\${PWD}/igblast/optional_file/human_gl.aux" \
         -show_translation \
         -num_alignments_V 1 -num_alignments_D 1 -num_alignments_J 1 \
         -outfmt 19 > ${meta.well}_${pre_post}_consensus_igblast.tsv

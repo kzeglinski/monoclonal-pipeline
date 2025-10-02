@@ -1,7 +1,8 @@
-# rotate
+if len(read.seq) < 15000 {
+	# rotate
 seqid = args.seqid
 count!('total reads')
-if read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
+if read is [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
        	count!('rotated')
         rotated = before.concat(after)
        	# extract H and L
@@ -23,7 +24,7 @@ if read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
 
 # for the reverse complement
 # rotate
-if -read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
+if -read is [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
        	count!('rc rotated')
         rotated = before.concat(after)
        	# extract H and L
@@ -41,4 +42,5 @@ if -read is [before:_ TTTACACTTTATGCTTCCGGCTCGTATGTTG after:_] => {
                                	light.out!('{seqid}_light.fasta')
                        	}
        	}
+}
 }

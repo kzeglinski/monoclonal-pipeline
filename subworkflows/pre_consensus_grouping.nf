@@ -3,7 +3,6 @@ include { igblast } from '../modules/igblast'
 process group_reads {
     tag { meta.well }
     label 'process_low'
-    //publishDir "${params.out_dir}/qc", mode: 'copy', pattern: "*.csv"
 
     conda (params.enable_conda ? 'conda-forge::r-tidyverse=2.0.0' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -15,7 +14,6 @@ process group_reads {
 
     output:
     tuple val(meta), path("*_heavy_clean.fasta"), path("*_light_clean.fasta"), emit: consensus_input, optional: true
-    tuple val(meta), path("*_qc.csv"), emit: qc
 
     script:
     """
@@ -36,73 +34,55 @@ process group_reads {
     # heavy chains
     heavy <- annotation %>%
         filter(str_detect(v_call, "IGH")) %>%
-        group_by(v_call, d_call, j_call) %>%
         summarise(
             count = n(),
             reads = paste(sequence_id, sequence, 
-                sep = "\n", collapse = "\n")) %>%
+                sep = "\n", collapse = "\n"),
+            .by = c(v_call, d_call, j_call)) %>%
         arrange(desc(count))
 
     light <- annotation %>%
         filter(!str_detect(v_call, "IGH")) %>%
-        group_by(v_call, d_call, j_call) %>%
         summarise(
             count = n(),
             reads = paste(sequence_id, sequence, 
-                sep = "\n", collapse = "\n")) %>%
+                sep = "\n", collapse = "\n"),
+            .by = c(v_call, j_call)) %>%
         arrange(desc(count))
 
-    # check if monoclonal -> 2nd most abudant v/d/j combo should
-    # be 10% or less of the main one
-    main_heavy <- ungroup(heavy) %>% slice_head(n = 1) %>% pull(count)
-    main_light <- ungroup(light) %>% slice_head(n = 1) %>% pull(count)
+    # new approach: take consensus of all v/d/j combo that is has a count 
+    # at least 10% of the most abundant combo
 
-    if (nrow(light) == 1){
-        second_light <- 0
-    } else {
-        second_light <- ungroup(light) %>% slice(2:2) %>% pull(count)
+    # first find that cutoff
+    cons_cutoff_h <- floor(pull(slice_head(heavy, n = 1), count) * 0.1)
+    cons_cutoff_l <- floor(pull(slice_head(light, n = 1), count) * 0.1)
+
+    # count needs to be at least 3
+    # if not, just take the most abundant one 
+    if (cons_cutoff_h < 3) {
+        cons_cutoff_h <- pull(slice_head(heavy, n = 1), count)
     }
 
-    if (nrow(heavy) == 1){
-        second_heavy <- 0
-    } else {
-        second_heavy <- ungroup(heavy) %>% slice(2:2) %>% pull(count)
-    }
-
-    if ((main_heavy * 0.15 < second_heavy) | (main_light * 0.15 < second_light)){
-        if (main_heavy < 25 | main_light < 25){
-            status <- "potentially monoclonal"
-        } else {
-            status <- "not monoclonal"
-        }
-        
-    } else {
-        status <- "normal"
+    if (cons_cutoff_l < 3) {
+        cons_cutoff_l <- pull(slice_head(light, n = 1), count)
     }
 
     # write out the heavy and light reads for consensus
-    ungroup(heavy) %>% 
-        slice_head(n = 1) %>% 
-        pull(reads) %>%
-        write_lines(file = paste0(id, "_heavy_clean.fasta"))
+    # do it for any that pass the cutoff
+    for_cons_h <- heavy %>% filter(count >= cons_cutoff_h)
+    for_cons_l <- light %>% filter(count >= cons_cutoff_l)
 
-    ungroup(light) %>% 
-        slice_head(n = 1) %>% 
-        pull(reads) %>%
-        write_lines(file = paste0(id, "_light_clean.fasta"))
+    for (i in seq_len(nrow(for_cons_h))) {
+        this_clone <- for_cons_h[i ,]
+        this_count <- this_clone\$count
+        this_clone %>% pull(reads) %>% write_lines(file = paste0(id, "_", i , "_count_", this_count, "_heavy_clean.fasta"))
+    }
 
-    monoclonal_status <- data.frame(
-        barcode = '$meta.barcode',
-        well = id,
-        sample_id = '$meta.sample_id',
-        notes = '$meta.notes',
-        status = status,
-        main_heavy_counts = main_heavy,
-        second_heavy_counts = second_heavy,
-        main_light_counts = main_light,
-        second_light_counts = second_light
-    )
-    write_csv(monoclonal_status, paste0(id, "_monoclonal_qc.csv"))
+    for (i in seq_len(nrow(for_cons_l))) {
+        this_clone <- for_cons_l[i ,]
+        this_count <- this_clone\$count
+        this_clone %>% pull(reads) %>% write_lines(file = paste0(id, "_", i , "_count_", this_count,"_light_clean.fasta"))
+    }
     """
 }
 
@@ -123,8 +103,8 @@ workflow pre_consensus_grouping {
         // process this in R
         grouped_reads = group_reads(igblast_tsv)
         consensus_input = grouped_reads.consensus_input
-        qc = grouped_reads.qc
+
     emit:
         consensus_input
-        qc
+
 }

@@ -7,12 +7,14 @@ include { print_start } from './subworkflows/print_to_console'
 include { file_import } from './subworkflows/file_import'
 include { irrelevant_qc } from './subworkflows/quality_control'
 include { seqkit_stats } from './subworkflows/quality_control'
+include { post_consensus_qc } from './subworkflows/quality_control'
 include { matchbox_preprocess } from './modules/matchbox_preprocess'
 include { pre_consensus_grouping } from './subworkflows/pre_consensus_grouping'
 include { abpoa } from './modules/abpoa'
 include { igblast } from './modules/igblast'
 include { combine_consensus_seqs } from './modules/cat_outputs.nf'
 include { combine_csvs } from './modules/cat_outputs.nf'
+include { medaka } from './modules/medaka.nf'
 
 /*
  * Run the workflow
@@ -68,19 +70,25 @@ workflow {
 
     grouped_reads = pre_consensus_grouping(pp_reads_w_igblast_data)
     consensus_input = grouped_reads.consensus_input
-    monoclonal_qc = grouped_reads.qc
-    monoclonal_qc.map{it -> it[1]}.collect().set{for_combining_csv}
-    combine_csvs(for_combining_csv)
+
+    //monoclonal_qc = grouped_reads.qc
+    //monoclonal_qc.map{it -> it[1]}.collect().set{for_combining_csv}
+    //combine_csvs(for_combining_csv)
 
     // consensus calling
     consensus = abpoa(consensus_input)
+    //consensus = medaka(consensus_input)
+
     consensus.map{it -> it[1]}.collect().set{for_combining_fasta}
     combine_consensus_seqs(for_combining_fasta) // combine them all
     
     // post-consensus annotation
     consensus.combine(igblast_databases).set{ for_final_annot }
 
-    final_annotation = igblast(for_final_annot, "post")
+    final_annotation = igblast(for_final_annot, "post").map{it -> it[1]}.collect()
+
+    // qc of the final annotations
+    final_qc = post_consensus_qc(final_annotation)
 
     // TO-DO: QC REPORT (?)
 }

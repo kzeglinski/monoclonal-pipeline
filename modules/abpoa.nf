@@ -1,29 +1,52 @@
 process abpoa {
     tag { meta.well }
     label 'process_medium'
-    publishDir "${params.out_dir}/consensus", mode: 'copy', pattern: '*_consensus.fasta'
 
     conda (params.enable_conda ? 'bioconda::abpoa=1.5.4' : null)
+    // container with just abpoa
+    //container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+    //    'oras://community.wave.seqera.io/library/abpoa:1.5.4--62e7dd62ad91bc78' :
+    //    'community.wave.seqera.io/library/abpoa:1.5.4--cf15dcf6248e1556' }"
+    
+    // container with abpoa and seqkit for subsetting reads first
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'oras://community.wave.seqera.io/library/abpoa:1.5.4--62e7dd62ad91bc78' :
-        'community.wave.seqera.io/library/abpoa:1.5.4--cf15dcf6248e1556' }"
+    'oras://community.wave.seqera.io/library/abpoa_seqkit:9b947cb71c5cc140' :
+    'community.wave.seqera.io/library/abpoa_seqkit:0e9bcb3f2f1c3292' }"
 
     input:
     tuple val(meta), path(heavy), path(light)
 
     output:
-    tuple val(meta), path("*_consensus.fasta"), emit: consensus_seq
+    tuple val(meta), path("*_all_consensus.fasta"), emit: consensus_seq
 
     script:
 
     """
-    abpoa $heavy > "${meta.well}_consensus_heavy.fasta"
-    sed -i '1c\\>${meta.well}_H' "${meta.well}_consensus_heavy.fasta"
+    for file in *_heavy_clean.fasta; do
+        # Skip if no files matched
+        [ -e "\$file" ] || continue
 
-    abpoa $light > "${meta.well}_consensus_light.fasta"
-    sed -i '1c\\>${meta.well}_L' "${meta.well}_consensus_light.fasta"
+        base="\$(basename "\$file" .fasta)"
 
-    cat "${meta.well}_consensus_heavy.fasta" \
-        "${meta.well}_consensus_light.fasta" > "${meta.well}_consensus.fasta"
+        echo "Processing \$file"
+        abpoa \$file > "\${base}_consensus.fasta"
+        sed -i "1c\\>\${base}" "\${base}_consensus.fasta"
+        
+    done
+    
+
+    for file in *_light_clean.fasta; do
+        # Skip if no files matched
+        [ -e "\$file" ] || continue
+
+        base="\$(basename "\$file" .fasta)"
+
+        echo "Processing \$file"
+        abpoa \$file > "\${base}_consensus.fasta"
+        sed -i "1c\\>\${base}" "\${base}_consensus.fasta"
+        
+    done
+
+    cat *_consensus.fasta > "${meta.well}_all_consensus.fasta"
     """
 }

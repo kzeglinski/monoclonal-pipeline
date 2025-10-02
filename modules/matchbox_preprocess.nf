@@ -3,7 +3,7 @@ process matchbox_preprocess {
     label 'process_low'
 	publishDir "${params.out_dir}/qc", pattern: "*.tsv",  mode: 'copy', failOnError: true
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'docker://ghcr.io/kzeglinski/matchbox:0.1.0' :
+        'library://kzeglinski/nanologix/matchbox:v0.0.3' :
         'ghcr.io/kzeglinski/matchbox:0.1.0' }"
 
 	input:
@@ -20,7 +20,7 @@ process matchbox_preprocess {
 	"""
 	# need to edit this to use the flanking sequences from file and rotate sequence
 	matchbox \
-		--script "$projectDir/scripts/${vector_type}_preprocess.mb" \
+		--script-file "$projectDir/scripts/${vector_type}_preprocess.mb" \
 		-e 0.2 \
 		--args "seqid='${meta.well}'" \
 		$reads > "${meta.well}_preprocess_qc.tsv" 
