@@ -64,8 +64,6 @@ workflow {
     // to find ab reads
 
     // pre-consensus annotation & grouping
-    // this is kinda dumb but i can't get it to run an igblast for each
-    // well unless i join the channels??
     pp_reads_w_igblast_data = preprocessed_reads.combine(igblast_databases)
 
     grouped_reads = pre_consensus_grouping(pp_reads_w_igblast_data)

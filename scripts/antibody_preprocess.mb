@@ -1,46 +1,48 @@
 if len(read.seq) < 15000 {
-	# rotate
 seqid = args.seqid
 count!('total reads')
-if read is [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
-       	count!('rotated')
+if read matches [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
+        count!('rotated')
         rotated = before.concat(after)
-       	# extract H and L
-       	if rotated is [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-               	count!('heavy')
-               	if rotated is
-                       	[_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                               	count!('heavy + kappa')
-                               	heavy.out!('{seqid}_heavy.fasta')
-                               	light.out!('{seqid}_light.fasta')
-                       	}
-                       	[_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                               	count!('heavy + lambda')
-                               	heavy.out!('{seqid}_heavy.fasta')
-                               	light.out!('{seqid}_light.fasta')
-                       	}
-       	}
+        # extract H and L
+        if rotated matches [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
+                count!('heavy')
+                if rotated matches{
+                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
+                                count!('heavy + kappa')
+                                heavy.out!('{seqid}_heavy.fasta')
+                                light.out!('{seqid}_light.fasta')
+                        }
+                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
+                                count!('heavy + lambda')
+                                heavy.out!('{seqid}_heavy.fasta')
+                                light.out!('{seqid}_light.fasta')
+                }
+          }
+
+        }
 }
 
 # for the reverse complement
-# rotate
-if -read is [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
-       	count!('rc rotated')
+if -read matches [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
+        count!('rc rotated')
         rotated = before.concat(after)
-       	# extract H and L
-       	if rotated is [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-               	count!('rc heavy')
-               	if rotated is
-                       	[_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                               	count!('rc heavy + kappa')
-                               	heavy.out!('{seqid}_heavy.fasta')
-                               	light.out!('{seqid}_light.fasta')
-                       	}
-                       	[_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                               	count!('rc heavy + lambda')
-                               	heavy.out!('{seqid}_heavy.fasta')
-                               	light.out!('{seqid}_light.fasta')
-                       	}
-       	}
+        # extract H and L
+        if rotated matches [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
+                count!('rc heavy')
+                if rotated matches{
+                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
+                                count!('rc heavy + kappa')
+                                heavy.out!('{seqid}_heavy.fasta')
+                                light.out!('{seqid}_light.fasta')
+                        }
+                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
+                                count!('rc heavy + lambda')
+                                heavy.out!('{seqid}_heavy.fasta')
+                                light.out!('{seqid}_light.fasta')
+                        }
+                }
+
+        }
 }
 }
