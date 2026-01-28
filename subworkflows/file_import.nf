@@ -1,5 +1,39 @@
-// TO DO: VALIDATE THE SAMPLE SHEET
-// TO DO: VALIDATE THE FLANKING SEQUENCE FILE
+process check_sample_sheet {
+    tag "checking sample sheet"
+    label 'process_low'
+
+    conda (params.enable_conda ? 'conda-forge::r-tidyverse=2.0.0' : null)
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'oras://community.wave.seqera.io/library/r-tidyverse:2.0.0--33f4d800f6070aac' :
+        'community.wave.seqera.io/library/r-tidyverse:2.0.0--dd61b4cbf9e28186' }"
+
+    input:
+    path(sample_sheet)
+
+    script:
+    """
+    sample_sheet_validation.R ${sample_sheet}
+    """
+}
+
+process check_flanking_file {
+    tag "checking flanking sequences file"
+    label 'process_low'
+
+    conda (params.enable_conda ? 'conda-forge::r-tidyverse=2.0.0' : null)
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'oras://community.wave.seqera.io/library/r-tidyverse:2.0.0--33f4d800f6070aac' :
+        'community.wave.seqera.io/library/r-tidyverse:2.0.0--dd61b4cbf9e28186' }"
+
+    input:
+    path(flanking_sequences)
+    val(vector_type)
+
+    script:
+    """
+    flanking_file_validation.R ${flanking_sequences} ${vector_type}
+    """
+}
 
 process concat_reads {
     tag { meta.well }
@@ -37,7 +71,8 @@ workflow parse_sample_sheet{
 
     main:
         fastq_extns = [ '.fastq', '.fastq.gz' , '.fq', '.fq.gz' ]
-        // validate sample sheet here
+        // validate sample sheet
+        check_sample_sheet(sample_sheet)
 
         sample_sheet
             .splitCsv(skip: 1, header: false, sep: ',')
@@ -70,7 +105,8 @@ workflow parse_flanking_file{
         vector_type
 
     main:
-        // validate flanking file here
+        // validate flanking file
+        check_flanking_file(flanking_sequences, vector_type)
 
         flanking_sequences
             .splitCsv(header: true, sep: ',')
