@@ -20,14 +20,14 @@ required_columns <- c("vector_type", "flank_name", "flank_L", "flank_R")
 missing_columns <- setdiff(required_columns, colnames(flanking_sequences))
 
 if(length(missing_columns) > 0){
-    stop("Sample sheet is missing the following required column(s): ", 
+    stop("Flanking sequences file is missing the following required column(s): ", 
         paste(missing_columns, collapse = ", "))
 }
 
 # if vector_type is 'nanobody', check that there is only one nanobody vh flanking sequence
 if(vector_type == "nanobody"){
     nanobody_vh_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "nanobody" & 
-                                                flanking_sequences[["sample_name"]] == "vh", ])
+                                                flanking_sequences[["flank_name"]] == "vh", ])
     if(nanobody_vh_rows != 1){
         stop("For 'nanobody' vector type, the flanking sequences file should contain 1 'vh' flanking sequence. Found ", 
             nanobody_vh_rows, " 'vh' nanobody flanking sequences.")
