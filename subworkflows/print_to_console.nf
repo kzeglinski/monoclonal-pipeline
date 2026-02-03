@@ -21,6 +21,7 @@ Required arguments:
 --vector_type  : is this an "antibody" or "nanobody" vector
         
 Optional (only needed for advanced users)
+--annotation_method   : use "riot" or "igblast" antibody annotation method (default: riot)
 --igblast_databases   : location of the igblast databases
 --rotate_sequence     : rotate plasmids to begin with this (default: lac promoter)
 --flanking_sequences  : .csv flanking file (format: vector_type,flank_name,flank_L,flank_R)
@@ -42,11 +43,12 @@ log.info """
  .-;":-.
 ,'|  `; \
 
-input reads dir : ${fastq_dir}
-input tar file  : ${tar_path}
-sample sheet    : ${params.sample_sheet}
-output directory: ${params.out_dir}
-vector_type     : ${params.vector_type}
+input reads dir   : ${fastq_dir}
+input tar file    : ${tar_path}
+sample sheet      : ${params.sample_sheet}
+output directory  : ${params.out_dir}
+vector_type       : ${params.vector_type}
+annotation_method : ${params.annotation_method}
 """
 
 }

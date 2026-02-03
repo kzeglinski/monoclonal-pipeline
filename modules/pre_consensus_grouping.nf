@@ -1,6 +1,4 @@
-include { igblast } from '../modules/igblast'
-
-process group_reads {
+process preconsensus_group_reads {
     tag { meta.well }
     label 'process_low'
 
@@ -10,7 +8,7 @@ process group_reads {
         'community.wave.seqera.io/library/r-tidyverse:2.0.0--dd61b4cbf9e28186' }"
 
     input:
-    tuple val(meta), path(igblast_output)
+    tuple val(meta), path(annotation_output)
 
     output:
     tuple val(meta), path("*_heavy_clean.fasta"), path("*_light_clean.fasta"), emit: consensus_input, optional: true
@@ -23,9 +21,9 @@ process group_reads {
     id <- '$meta.well'
     
     annotation <- read_tsv(
-        fs::dir_ls(glob = "*_pre_consensus_igblast.tsv"),
-        col_select = c(sequence_id, complete_vdj, v_call, 
-            d_call, j_call, sequence)) %>%
+        fs::dir_ls(glob = "*_pre_consensus_annotation.tsv")) %>%
+        rename_with(~ "sequence_id", matches("sequence_(id|header)")) %>%
+        select(sequence_id, complete_vdj, v_call, d_call, j_call, sequence) %>%
         # for writing out the fasta later
         mutate(sequence_id = paste0(">", sequence_id)) %>%
         # remove abnormally long sequences, they mess up consensus
@@ -84,27 +82,4 @@ process group_reads {
         this_clone %>% pull(reads) %>% write_lines(file = paste0(id, "_", i , "_count_", this_count,"_light_clean.fasta"))
     }
     """
-}
-
-workflow pre_consensus_grouping {
-    take:
-        reads_with_igblast_data
-
-    main:
-        // annotate reads using igblast
-        // TO-DO: GET USER TO INPUT ORGANISM SOMEWHERE? IN FLANK FILE?
-        // MAYBE WE COULD RENAME FLANK FILE LIKE LIB STRUCT OR SMTH
-        // ATM ITS HARDCODED TO HUMAN
-
-        igblast_tsv = igblast(
-            reads_with_igblast_data,
-            "pre").airr_table
-
-        // process this in R
-        grouped_reads = group_reads(igblast_tsv)
-        consensus_input = grouped_reads.consensus_input
-
-    emit:
-        consensus_input
-
 }

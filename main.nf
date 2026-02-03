@@ -9,12 +9,17 @@ include { irrelevant_qc } from './subworkflows/quality_control'
 include { seqkit_stats } from './subworkflows/quality_control'
 include { post_consensus_qc } from './subworkflows/quality_control'
 include { matchbox_preprocess } from './modules/matchbox_preprocess'
-include { pre_consensus_grouping } from './subworkflows/pre_consensus_grouping'
+include { preconsensus_group_reads } from './modules/pre_consensus_grouping'
 include { abpoa } from './modules/abpoa'
 include { igblast } from './modules/igblast'
-include { combine_consensus_seqs } from './modules/cat_outputs.nf'
-include { combine_csvs } from './modules/cat_outputs.nf'
-include { medaka } from './modules/medaka.nf'
+include { igblast as igblast2 } from './modules/igblast'
+include { riot } from './modules/riot'
+include { riot as riot2 } from './modules/riot'
+include { csv_to_tsv } from './modules/riot'
+include { csv_to_tsv as csv_to_tsv2 } from './modules/riot'
+include { combine_consensus_seqs } from './modules/cat_outputs'
+include { combine_csvs } from './modules/cat_outputs'
+include { medaka } from './modules/medaka'
 
 /*
  * Run the workflow
@@ -31,6 +36,7 @@ workflow {
     sample_sheet = Channel.fromPath(file(params.sample_sheet))
     vector_type = params.vector_type
     igblast_databases = Channel.fromPath(file(params.igblast_databases))
+    annotation_method = params.annotation_method
 
     // collect is used here to turn these into value channels
     // this means we can use the one reference file to process many
@@ -64,10 +70,18 @@ workflow {
     // to find ab reads
 
     // pre-consensus annotation & grouping
-    pp_reads_w_igblast_data = preprocessed_reads.combine(igblast_databases)
-
-    grouped_reads = pre_consensus_grouping(pp_reads_w_igblast_data)
-    consensus_input = grouped_reads.consensus_input
+    if (params.annotation_method == 'riot') {
+        initial_annotation_csv = riot(preprocessed_reads, "pre").airr_table
+        initial_annotation = csv_to_tsv(initial_annotation_csv).tsv
+    }
+    else if (params.annotation_method == 'igblast') {
+        pp_reads_w_igblast_data = preprocessed_reads.combine(igblast_databases)
+        initial_annotation = igblast(pp_reads_w_igblast_data, "pre").airr_table
+    }
+    else {
+        error "Invalid --annotation_method '${params.annotation_method}'. Choose riot or igblast."
+    }
+    consensus_input = preconsensus_group_reads(initial_annotation).consensus_input
 
     //monoclonal_qc = grouped_reads.qc
     //monoclonal_qc.map{it -> it[1]}.collect().set{for_combining_csv}
@@ -81,9 +95,17 @@ workflow {
     combine_consensus_seqs(for_combining_fasta) // combine them all
     
     // post-consensus annotation
-    consensus.combine(igblast_databases).set{ for_final_annot }
-
-    final_annotation = igblast(for_final_annot, "post").map{it -> it[1]}.collect()
+    if (params.annotation_method == 'riot') {
+        final_annotation_csv = riot2(consensus, "post").airr_table
+        final_annotation = csv_to_tsv2(final_annotation_csv).tsv.map{it -> it[1]}.collect()
+    }
+    else if (params.annotation_method == 'igblast') {
+        consensus.combine(igblast_databases).set{ for_final_annot }
+        final_annotation = igblast2(for_final_annot, "post").map{it -> it[1]}.collect()
+    }
+    else {
+        error "Invalid --annotation_method '${params.annotation_method}'. Choose riot or igblast."
+    }
 
     // qc of the final annotations
     final_qc = post_consensus_qc(final_annotation)

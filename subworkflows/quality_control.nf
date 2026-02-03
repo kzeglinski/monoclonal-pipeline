@@ -128,16 +128,18 @@ process post_consensus_qc {
     library(tidyverse)
 
 annotation <- read_tsv(
-    fs::dir_ls(glob = "*.tsv"),
-    col_select = c(sequence_id, locus, productive, v_call, 
-        d_call, j_call, cdr1_aa, cdr2_aa, cdr3_aa, sequence),
-        id = "well") %>%
+    fs::dir_ls(glob = "*.tsv"), id = "well") %>%
+    rename_with(~ "sequence_id", matches("sequence_(id|header)")) %>%
+    select(sequence_id, locus, productive, v_call, 
+        d_call, j_call, cdr1_aa, cdr2_aa, cdr3_aa, sequence, well) %>%
     # add count column (extract from sequence ID)
     mutate(count = as.numeric(str_remove(str_extract(sequence_id, "count_[[:digit:]]*"), "count_"))) %>% 
     # for writing out the fasta later
     mutate(sequence_id = paste0(">", str_remove(sequence_id, "_(?<=_).*"))) %>%
+    # convert all values in 'locus' column to uppercase (riot outputs lowercase)
+    mutate(locus = toupper(locus)) %>%
     # remove all the junk from the ID
-    mutate(well = str_remove(basename(well), "_post_consensus_igblast.tsv")) %>%
+    mutate(well = str_remove(basename(well), "_post_consensus_annotation.tsv")) %>%
     relocate(count, .after = "sequence_id") %>%
     # collapse those from the same well with same v&j
     # always take the productive one with highest count

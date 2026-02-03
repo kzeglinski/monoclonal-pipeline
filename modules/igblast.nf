@@ -14,7 +14,7 @@ process igblast {
     val pre_post
 
     output:
-    tuple val(meta), path('*_consensus_igblast.tsv'), emit: airr_table
+    tuple val(meta), path('*_consensus_annotation.tsv'), emit: airr_table
 
     script:
 
@@ -33,6 +33,6 @@ process igblast {
         -auxiliary_data "\${PWD}/igblast/optional_file/human_gl.aux" \
         -show_translation \
         -num_alignments_V 1 -num_alignments_D 1 -num_alignments_J 1 \
-        -outfmt 19 > ${meta.well}_${pre_post}_consensus_igblast.tsv
+        -outfmt 19 > ${meta.well}_${pre_post}_consensus_annotation.tsv
     """
 }
