@@ -14,7 +14,7 @@ process abpoa {
     'community.wave.seqera.io/library/abpoa_seqkit:0e9bcb3f2f1c3292' }"
 
     input:
-    tuple val(meta), path(heavy), path(light)
+    tuple val(meta), path(clean_fasta)
 
     output:
     tuple val(meta), path("*_all_consensus.fasta"), emit: consensus_seq

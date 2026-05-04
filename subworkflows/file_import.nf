@@ -29,6 +29,9 @@ process check_flanking_file {
     path(flanking_sequences)
     val(vector_type)
 
+    output:
+    path("flanking_seqs_for_mb.csv"), emit: mb_flanks
+
     script:
     """
     flanking_file_validation.R ${flanking_sequences} ${vector_type}
@@ -81,22 +84,39 @@ workflow parse_sample_sheet{
                 def barcode = row[0]
                 def well = row[1]
                 def sample_id = row[2]
-                def notes = row[3]
+                def vector = row[3]
                 // find fastq in the barcoded directories
                 def full_path = fastq_dir + "/" + barcode
                 def all_files = file(full_path).listFiles()
                 def fastq_files = all_files.findAll { fn ->
                         fastq_extns.find { fn.name.endsWith( it ) }
                     }
-                return tuple([barcode:barcode, well:well, sample_id:sample_id, notes:notes], fastq_files)
+                return tuple([barcode:barcode, well:well, sample_id:sample_id, vector:vector], fastq_files)
             }
             // concat all files in each barcoded directory
             .set { sample_info } 
 
+        // set vector_type based on whether plate has only antibodies / only nanobodies / mix of both
+        // ignore vector types other than antibody and nanobody (i.e. empty_well, irrelevant_phage)
+        sample_info
+            .map{ it[0].vector }
+            .filter{ it == "antibody" || it == "nanobody" }
+            .collect()
+            .map{ vector_types ->
+                if( vector_types.every { it == "antibody" } )
+                    return "antibody"
+                else if( vector_types.every { it == "nanobody" } )
+                    return "nanobody"
+                else
+                    return "both"
+            }
+            .set { vector_type }
+        
         sample_info_with_reads = concat_reads(sample_info)
 
     emit:
         sample_info_with_reads
+        vector_type
 }
 
 workflow parse_flanking_file{
@@ -108,19 +128,11 @@ workflow parse_flanking_file{
         // validate flanking file
         check_flanking_file(flanking_sequences, vector_type)
 
-        flanking_sequences
+        flanks = check_flanking_file.out.mb_flanks
             .splitCsv(header: true, sep: ',')
-            // or is it better to require exactly matching col names?
-            .map{row ->
-                [
-                type: row["vector_type"],
-                name: row["flank_name"],
-                flank_L: row["flank_L"],
-                flank_R: row["flank_R"]
-                ]
-            }
-            .filter{it.type == vector_type}
-            .set { flanks }
+            .map{row -> [(row.parameter): row.sequence]} // convert to map of parameter:sequence
+            .reduce{ acc, item -> acc + item } // combine list of maps into one map
+        
     emit:
         flanks
 }
@@ -130,14 +142,16 @@ workflow file_import{
         sample_sheet
         fastq_dir
         flanking_sequences
-        vector_type
 
     main:
-        samples = parse_sample_sheet(sample_sheet, fastq_dir)
+        parsed_sample_sheet = parse_sample_sheet(sample_sheet, fastq_dir)
+        samples = parsed_sample_sheet.sample_info_with_reads
+        vector_type = parsed_sample_sheet.vector_type
+        vector_type.view()
         flanks = parse_flanking_file(flanking_sequences, vector_type)
     
     emit:
-        samples
-        flanks
+        samples // tuple of val(sample metadata), path(concat reads)
+        flanks // map of flanking parameter:sequence
 
 }

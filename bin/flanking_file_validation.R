@@ -24,27 +24,39 @@ if(length(missing_columns) > 0){
         paste(missing_columns, collapse = ", "))
 }
 
-# if vector_type is 'nanobody', check that there is only one nanobody vh flanking sequence
+# check number of flanking sequences for each vector type
+nanobody_nb_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "nanobody" & 
+                                            flanking_sequences[["flank_name"]] == "nb", ])
+antibody_vh_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" & 
+                                            flanking_sequences[["flank_name"]] == "vh", ])
+antibody_vlk_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" & 
+                                            flanking_sequences[["flank_name"]] == "vlk", ])
+antibody_vll_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" &
+                                            flanking_sequences[["flank_name"]] == "vll", ])
+
+# if vector_type is 'nanobody', check that there is only 1 nanobody nb flanking sequence
 if(vector_type == "nanobody"){
-    nanobody_vh_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "nanobody" & 
-                                                flanking_sequences[["flank_name"]] == "vh", ])
-    if(nanobody_vh_rows != 1){
-        stop("For 'nanobody' vector type, the flanking sequences file should contain 1 'vh' flanking sequence. Found ", 
-            nanobody_vh_rows, " 'vh' nanobody flanking sequences.")
+    if(nanobody_nb_rows != 1){
+        stop("For 'nanobody' vector type, the flanking sequences file should contain 1 'nb' flanking sequence. Found ", 
+            nanobody_nb_rows, " 'nb' nanobody flanking sequences.")
     }
 }
 
-# if vector_type is 'antibody', check that there is only one antibody vh, vlk and vll flanking sequence
+# if vector_type is 'antibody', check that there is only 1 antibody vh, vlk and vll flanking sequence
 if(vector_type == "antibody"){
-    antibody_flank_names <- c("vh", "vlk", "vll")
-    antibody_vh_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" & 
-                                                flanking_sequences[["flank_name"]] == "vh", ])
-    antibody_vlk_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" & 
-                                                flanking_sequences[["flank_name"]] == "vlk", ])
-    antibody_vll_rows <- nrow(flanking_sequences[flanking_sequences[["vector_type"]] == "antibody" &
-                                                flanking_sequences[["flank_name"]] == "vll", ])
     if(antibody_vh_rows != 1 || antibody_vlk_rows != 1 || antibody_vll_rows != 1){
         stop("For 'antibody' vector type, the flanking sequences file should contain 1 'vh' sequence, 1 'vlk' sequence and 1 'vll' sequence.\n Found ",
+            antibody_vh_rows, " 'vh' antibody sequence(s), ",
+            antibody_vlk_rows, " 'vlk' antibody sequence(s) and ",
+            antibody_vll_rows, " 'vll' antibody sequence(s).")
+    }
+}
+
+# if vector_type is 'both', check that there is only 1 nanobody nb flanking sequence and 1 antibody vh, vlk and vll flanking sequence
+if(vector_type == "both"){
+    if(nanobody_nb_rows != 1 || antibody_vh_rows != 1 || antibody_vlk_rows != 1 || antibody_vll_rows != 1){
+        stop("For 'both' vector type (antibodies & nanobodies), the flanking sequences file should contain 1 'nb' nanobody sequence, 1 'vh' antibody sequence, 1 'vlk' antibody sequence and 1 'vll' antibody sequence.\n Found ",
+            nanobody_nb_rows, " 'nb' nanobody sequence(s), ",
             antibody_vh_rows, " 'vh' antibody sequence(s), ",
             antibody_vlk_rows, " 'vlk' antibody sequence(s) and ",
             antibody_vll_rows, " 'vll' antibody sequence(s).")
@@ -67,3 +79,19 @@ if(length(invalid_flank_R) > 0){
         paste(invalid_flank_R, collapse = ", "),
         ". Sequences should contain only DNA characters (A, T, C, G).")
 }
+
+flanks <- list()
+for(i in 1:nrow(flanking_sequences)){
+    row <- flanking_sequences[i, ]
+    # join vector type, flank name and L/R to create parameter name (e.g. vh_flank_L, vlk_flank_R, etc.)
+    flank_name <- paste0(row[["vector_type"]], "_", row[["flank_name"]])
+    flanks[[paste0(flank_name, "_L")]] <- row[["flank_L"]]
+    flanks[[paste0(flank_name, "_R")]] <- row[["flank_R"]]
+}
+
+flanks_df <- data.frame(
+    parameter = names(flanks),
+    sequence = unlist(flanks)
+)
+
+write_csv(flanks_df, "flanking_sequences_for_matchbox.csv")

@@ -34,7 +34,6 @@ workflow {
     out_dir = params.out_dir
     fastq_dir = params.fastq_dir
     sample_sheet = Channel.fromPath(file(params.sample_sheet))
-    vector_type = params.vector_type
     igblast_databases = Channel.fromPath(file(params.igblast_databases))
     annotation_method = params.annotation_method
 
@@ -48,7 +47,7 @@ workflow {
     // TO-DO: ADD BASECALLING (?)
 
     // import the files 
-    file_import(sample_sheet, fastq_dir, flanking_sequences, vector_type)
+    file_import(sample_sheet, fastq_dir, flanking_sequences)
     samples = file_import.out.samples
     flanks = file_import.out.flanks
 
@@ -59,10 +58,9 @@ workflow {
     irr_phage_qc = irrelevant_qc(samples, irrelevant_reference)
 
     // read pre-processing
-    // TO-DO: EDIT THE PROCESS AND MATCHBOX SCRIPT TO TAKE INTO
-    // CONSIDERATION THE FLANKING FILE AND ROTATE SEQUENCE
-    // RIGHT NOW IT'S STILL HARD CODED
-    preprocessing_results = matchbox_preprocess(samples, flanking_sequences, rotate_sequence, vector_type)
+    // TO-DO: edit process and matchbox script to take into account rotate sequence?
+    // right now still hard-coded
+    preprocessing_results = matchbox_preprocess(samples, flanks)
     preprocessing_qc = preprocessing_results.qc_numbers
     preprocessed_reads = preprocessing_results.preprocessed_reads
     
@@ -81,12 +79,14 @@ workflow {
     else {
         error "Invalid --annotation_method '${params.annotation_method}'. Choose riot or igblast."
     }
-    consensus_input = preconsensus_group_reads(initial_annotation).consensus_input
 
     //monoclonal_qc = grouped_reads.qc
     //monoclonal_qc.map{it -> it[1]}.collect().set{for_combining_csv}
     //combine_csvs(for_combining_csv)
 
+    grouped_reads = preconsensus_group_reads(initial_annotation)
+    consensus_input = grouped_reads.consensus_input
+    
     // consensus calling
     consensus = abpoa(consensus_input)
     //consensus = medaka(consensus_input)

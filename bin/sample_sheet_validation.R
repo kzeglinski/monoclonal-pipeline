@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # sample_sheet_validation.r
 
-library(readr)
+library(tidyverse)
 
 args <- commandArgs(trailingOnly=TRUE)
 sample_sheet_file <- args[1]
@@ -15,7 +15,7 @@ if(!file.exists(sample_sheet_file)){
 sample_sheet <- read_csv(sample_sheet_file, show_col_types = FALSE)
 
 # check all required columns present
-required_columns <- c("barcode", "alias", "cbt_phage_id", "notes")
+required_columns <- c("barcode", "alias", "cbt_phage_id", "vector")
 missing_columns <- setdiff(required_columns, colnames(sample_sheet))
 
 if(length(missing_columns) > 0){
@@ -59,4 +59,23 @@ if(length(duplicated_aliases) > 0){
     stop("The 'alias' column contains duplicate alias(es): ", 
         paste(duplicated_aliases, collapse = ", "),
         ". Each alias must be unique.")
+}
+
+# check vector column
+sample_sheet <- sample_sheet %>%
+    mutate(vector = case_when(
+        str_detect(vector, regex("empty", ignore_case = TRUE)) ~ "empty_well",
+        str_detect(vector, regex("irr", ignore_case = TRUE)) ~ "irrelevant_phage",
+        str_detect(vector, regex("anti", ignore_case = TRUE)) | str_detect(vector, regex("ab", ignore_case = TRUE)) ~ "antibody",
+        str_detect(vector, regex("nano", ignore_case = TRUE)) | str_detect(vector, regex("nb", ignore_case = TRUE)) ~ "nanobody",
+        TRUE ~ str_replace_all(tolower(vector), "\\s+", "")
+    ))
+
+allowed_vector_values <- c("antibody", "nanobody", "empty_well", "irrelevant_phage")
+invalid_vector_values <- sample_sheet[["vector"]][!sample_sheet[["vector"]] %in% allowed_vector_values]
+
+if(length(invalid_vector_values) > 0){
+    stop("The 'vector' column contains the following invalid value(s): ", 
+        paste(invalid_vector_values, collapse = ", "),
+        ". Allowed values are: antibody, nanobody, empty_well, irrelevant_phage.")
 }

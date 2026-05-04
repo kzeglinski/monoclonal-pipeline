@@ -1,48 +1,81 @@
+# Matchbox script for processing antibody sequences
+
+# Declare sequences from reference (flanking.csv) to use to extract HC and LC
+
+# Light chain flanking sequences
+vlk_flank_L     = args.vlk_flank_L
+vlk_flank_R     = args.vlk_flank_R
+vll_flank_L     = args.vll_flank_L
+vll_flank_R     = args.vll_flank_R
+
+# Heavy chain flanking sequences
+vh_flank_L      = args.vh_flank_L
+vh_flank_R      = args.vh_flank_R
+
 if len(read.seq) < 15000 {
-seqid = args.seqid
-count!('total reads')
-if read matches [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
-        count!('rotated')
-        rotated = before.concat(after)
-        # extract H and L
-        if rotated matches [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-                count!('heavy')
-                if rotated matches{
-                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                                count!('heavy + kappa')
-                                heavy.out!('{seqid}_heavy.fasta')
-                                light.out!('{seqid}_light.fasta')
-                        }
-                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                                count!('heavy + lambda')
-                                heavy.out!('{seqid}_heavy.fasta')
-                                light.out!('{seqid}_light.fasta')
-                }
-          }
+        
+        seqid = args.seqid
 
-        }
-}
+        count!('total reads')
+        
+        if read matches [before:_ after:(vlk_flank_L _)] => {
+        # note vlk_flank_L is the same as vll_flank_L, corresponds to light chain signal sequence
 
-# for the reverse complement
-if -read matches [before:_ ATGAAAAAGACAGCTATCGCGATTGCAGTG after:_] => {
-        count!('rc rotated')
-        rotated = before.concat(after)
-        # extract H and L
-        if rotated matches [_ GGCCTAATCTATTTCAAGGAGACAGTCATA heavy:_ GCTTCCACCAAGGGCCCATCGGTCTTCCCG _] => {
-                count!('rc heavy')
-                if rotated matches{
-                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GGTCAGCCCAAGGCTGCCCCCTCGGTCACT _] => {
-                                count!('rc heavy + kappa')
-                                heavy.out!('{seqid}_heavy.fasta')
-                                light.out!('{seqid}_light.fasta')
-                        }
-                        [_ GCGGATAACAATTTCACACAGGAAACAGCT light:_ GATCAAACGAAGGCTGCACCATCTGTCATT _] => {
-                                count!('rc heavy + lambda')
-                                heavy.out!('{seqid}_heavy.fasta')
-                                light.out!('{seqid}_light.fasta')
+                # Count number of reads that match the above pattern (i.e. contain vlk_flank_L) and can be rotated
+                count!('rotated')
+
+                # Rotate so that light chain is at the start of the read sequence
+                rotated = after.concat(before)
+
+                # Extract H and L
+                if rotated matches [_ vh_flank_L heavy:_ vh_flank_R _] => {
+                        
+                        # Count number of reads with heavy chains
+                        count!('heavy')
+
+                        # If heavy chain exists, search for corresponding light chain
+                        if rotated matches{
+
+                                # First look for kappa light chain
+                                [_ vlk_flank_L light:_ vlk_flank_R _] => {
+                                        count!('heavy + kappa')
+                                        heavy.out!('{seqid}_heavy.fasta')
+                                        light.out!('{seqid}_light.fasta')
+                                }
+
+                                # Then look for lambda light chain
+                                [_ vll_flank_L light:_ vll_flank_R _] => {
+                                        count!('heavy + lambda')
+                                        heavy.out!('{seqid}_heavy.fasta')
+                                        light.out!('{seqid}_light.fasta')
+                                }
                         }
                 }
-
         }
-}
+
+        # For the reverse complement
+        if -read matches [before:_ after:(vlk_flank_L _)] => {
+                
+                count!('rc rotated')
+                rotated = after.concat(before)
+                
+                # Extract H and L
+                if rotated matches [_ vh_flank_L heavy:_ vh_flank_R _] => {
+                        count!('rc heavy')
+                        if rotated matches{
+                                [_ vlk_flank_L light:_ vlk_flank_R _] => {
+                                        count!('rc heavy + kappa')
+                                        heavy.out!('{seqid}_heavy.fasta')
+                                        light.out!('{seqid}_light.fasta')
+                                }
+                                [_ vll_flank_L light:_ vll_flank_R _] => {
+                                        count!('rc heavy + lambda')
+                                        heavy.out!('{seqid}_heavy.fasta')
+                                        light.out!('{seqid}_light.fasta')
+                                }
+                        }
+
+                }
+        }
+
 }

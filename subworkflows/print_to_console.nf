@@ -18,7 +18,6 @@ Required arguments:
 --out_dir      : where to write output
 --fastq_dir    : where fastq files are located (fastq_pass folder)
 --sample_sheet : .csv sample sheet (format: barcode,well,sample_id,notes)
---vector_type  : is this an "antibody" or "nanobody" vector
         
 Optional (only needed for advanced users)
 --annotation_method   : use "riot" or "igblast" antibody annotation method (default: riot)
@@ -47,7 +46,6 @@ input reads dir   : ${fastq_dir}
 input tar file    : ${tar_path}
 sample sheet      : ${params.sample_sheet}
 output directory  : ${params.out_dir}
-vector_type       : ${params.vector_type}
 annotation_method : ${params.annotation_method}
 """
 

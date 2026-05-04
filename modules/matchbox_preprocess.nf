@@ -7,8 +7,8 @@ process matchbox_preprocess {
 	input:
     tuple val(meta), path(reads)
 	val(flanks)
-	val(rotate_sequence)
-	val(vector_type)
+	// val(rotate_sequence)
+	// val(vector_type)
     
     output:
     tuple val(meta), path('*_extracted.fasta'), emit: preprocessed_reads, optional: true
@@ -16,19 +16,28 @@ process matchbox_preprocess {
 
 	script:
 	"""
-	# need to edit this to use the flanking sequences from file and rotate sequence
-	matchbox \
-		--script-file "$projectDir/scripts/${vector_type}_preprocess.mb" \
-		-e 0.3 \
-		--args "seqid='${meta.well}'" \
-		$reads > "${meta.well}_preprocess_qc.tsv" 
+	# add rotate sequence?
 
-	# cat output files (e.g. if heavy and light chain)
+	if [ "${meta.vector}" == "nanobody" ]; then
+		matchbox \
+			--script-file "$projectDir/scripts/nanobody_preprocess.mb" \
+			-e 0.25 \
+			--args "seqid='${meta.well}', nb_flank_L='${flanks.nanobody_nb_L}', nb_flank_R='${flanks.nanobody_nb_R}'" \
+			$reads > "${meta.well}_preprocess_qc.tsv"
+	elif [ "${meta.vector}" == "antibody" ]; then
+		matchbox \
+			--script-file "$projectDir/scripts/antibody_preprocess.mb" \
+			-e 0.25 \
+			--args "seqid='${meta.well}', vh_flank_L='${flanks.antibody_vh_L}', vh_flank_R='${flanks.antibody_vh_R}', vlk_flank_L='${flanks.antibody_vlk_L}', vlk_flank_R='${flanks.antibody_vlk_R}', vll_flank_L='${flanks.antibody_vll_L}', vll_flank_R='${flanks.antibody_vll_R}'" \
+			$reads > "${meta.well}_preprocess_qc.tsv"
+	else
+		echo "vector type is ${meta.vector}; skipping matchbox preprocessing" > "${meta.well}_preprocess_qc.tsv"
+	fi
+
+	# cat output fasta files
 	myarray=(`find ./ -maxdepth 1 -name "*.fasta"`)
 	if [ \${#myarray[@]} -gt 0 ]; then 
     	cat ./*.fasta > "${meta.well}_extracted.fasta"
-	else 
-    	echo "no antibody sequences detected"
 	fi
 	
 	"""

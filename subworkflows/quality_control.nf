@@ -116,7 +116,7 @@ process post_consensus_qc {
         'community.wave.seqera.io/library/bioconductor-biostrings_r-tidyverse:285d583c318ea12d' }"
 
     input:
-    path(igblast_output)
+    path(annotation_output)
 
     output:
     path("*.csv"), emit: consensus_qc
@@ -128,25 +128,40 @@ process post_consensus_qc {
     library(tidyverse)
 
 annotation <- read_tsv(
+
+    # read in files from current task directory (contains files in annotation_output) and add column 'well' with the filename
     fs::dir_ls(glob = "*.tsv"), id = "well") %>%
     rename_with(~ "sequence_id", matches("sequence_(id|header)")) %>%
     select(sequence_id, locus, productive, v_call, 
         d_call, j_call, cdr1_aa, cdr2_aa, cdr3_aa, sequence, well) %>%
+    
     # add count column (extract from sequence ID)
     mutate(count = as.numeric(str_remove(str_extract(sequence_id, "count_[[:digit:]]*"), "count_"))) %>% 
+    relocate(count, .after = "sequence_id") %>%
+
+    # add vector type column (esp. antibody vs nanobody) by extracting from the filename (well column)
+    mutate(vector = case_when(
+        str_detect(well, "nanobody") ~ "nanobody",
+        str_detect(well, "antibody") ~ "antibody",
+        str_detect(well, "empty_well") ~ "empty_well",
+        str_detect(well, "irrelevant_phage") ~ "irrelevant_phage")) %>%
+    
+    # extract well from filename (remove everything after the first underscore which is after the well ID)
+    mutate(well = str_remove(well, "_(?<=_).*")) %>%
+    
     # for writing out the fasta later
-    mutate(sequence_id = paste0(">", str_remove(sequence_id, "_(?<=_).*"))) %>%
+    # mutate(sequence_id = paste0(">", str_remove(sequence_id, "_(?<=_).*"))) %>%
+    
     # convert all values in 'locus' column to uppercase (riot outputs lowercase)
     mutate(locus = toupper(locus)) %>%
-    # remove all the junk from the ID
-    mutate(well = str_remove(basename(well), "_post_consensus_annotation.tsv")) %>%
-    relocate(count, .after = "sequence_id") %>%
+
     # collapse those from the same well with same v&j
     # always take the productive one with highest count
     group_by(well, locus, v_call, cdr3_aa) %>%
     arrange(desc(productive), desc(count)) %>%
     summarise(
         well = well[1], 
+        vector = vector[1],
         count = sum((count)), 
         locus = locus[1],
         productive = productive[1],
@@ -156,7 +171,8 @@ annotation <- read_tsv(
         cdr1_aa = cdr1_aa[1],
         cdr2_aa = cdr2_aa[1],
         cdr3_aa = cdr3_aa[1],
-        sequence = sequence[1]
+        sequence = sequence[1],
+        sequence_id = sequence_id[1]
     )
 
 fix_amber_stop <- function(annotation){
@@ -178,8 +194,10 @@ fix_amber_stop <- function(annotation){
         ungroup() %>%
         mutate(
             has_amber_stop = !code_comparison,
+            amber_stop_position = NA,
             amber_corrected_nt = NA
         )
+    
     # loop over each row, cause idk how to use biostrings lol
     for (i in seq_len(nrow(annotation))) {
         # only need to do something if there was a diff 
@@ -201,6 +219,7 @@ fix_amber_stop <- function(annotation){
             ) 
 
             # now add this information to the annotation data 
+            annotation[["amber_stop_position"]][i] <- pos
             annotation[["amber_corrected_nt"]][i] <- as.character(corrected_nt)
         }
     }
@@ -213,13 +232,9 @@ annotation <- fix_amber_stop(annotation)
 # first thing is monoclonal qc table
 monoclonal_qc <- data.frame(
     well = unique(annotation[["well"]]),
+    vector = NA,
     monoclonal_status = NA
 )
-
-# annotation table
-annotation %>% 
-    left_join(monoclonal_qc, by = "well") %>%
-    write_csv("consensus_annotation.csv")
 
 for (i in seq_along(unique(annotation[["well"]]))) {
     # get just this well's data
@@ -228,65 +243,123 @@ for (i in seq_along(unique(annotation[["well"]]))) {
         filter(well == this_well)
 
     # check for monoclonality
-    # if only 2 rows, it's monoclonal
-    if (nrow(this_annotation) == 2) {
-        status <- "monoclonal (no subclones)"
+
+    # if vector type is empty_well or irrelevant_phage, skip monoclonal qc and just label as such
     
-    } else {
-        # otherwise find counts of top/second H/L
-        top_heavy_count <- this_annotation %>% 
-            filter(locus == "IGH") %>% arrange(desc(count)) %>% 
-            dplyr::slice(1:1) %>% pull(count)
+    if (this_annotation[["vector"]][1] == "empty_well") {
+        status <- "empty_well"
+    
+    } else if (this_annotation[["vector"]][1] == "irrelevant_phage") {
+        status <- "irrelevant_phage"
+    
+    # if vector type is antibody:
+    
+    } else if (this_annotation[["vector"]][1] == "antibody") {
 
-        if (nrow(filter(this_annotation, locus == "IGH")) > 1) {
-            second_heavy_count <- this_annotation %>% 
-                filter(locus == "IGH") %>% arrange(desc(count)) %>% 
-                dplyr::slice(2:2) %>% pull(count)
-        } else {
-            second_heavy_count <- 0
-        }
-
-        top_light_count <- this_annotation %>% 
-            filter(locus != "IGH") %>% arrange(desc(count)) %>% 
-            dplyr::slice(1:1) %>% pull(count)
-
-        if (nrow(filter(this_annotation, locus != "IGH")) > 1) {
-            second_heavy_count <- this_annotation %>% 
-                filter(locus != "IGH") %>% arrange(desc(count)) %>% 
-                dplyr::slice(2:2) %>% pull(count)
-        } else {
-            second_light_count <- 0
-        }
+        # if only 2 rows, it's monoclonal
+        if (nrow(this_annotation) == 2) {
+            status <- "monoclonal (no subclones)"
         
-        # other chance to be monoclonal is if the second most abundant H/L 
-        # chain is <10% the counts of the most abundant one
+        # otherwise find counts of top/second H/L
+        } else {
 
-        if ((second_heavy_count <= 0.1 * top_heavy_count) & 
-            (second_light_count <= 0.1 * top_light_count)) {
+            top_heavy_count <- this_annotation %>% 
+                filter(locus == "IGH") %>% arrange(desc(count)) %>% 
+                dplyr::slice(1:1) %>% pull(count)
+
+            if (nrow(filter(this_annotation, locus == "IGH")) > 1) {
+                second_heavy_count <- this_annotation %>% 
+                    filter(locus == "IGH") %>% arrange(desc(count)) %>% 
+                    dplyr::slice(2:2) %>% pull(count)
+            } else {
+                second_heavy_count <- 0
+            }
+
+            top_light_count <- this_annotation %>% 
+                filter(locus != "IGH") %>% arrange(desc(count)) %>% 
+                dplyr::slice(1:1) %>% pull(count)
+
+            if (nrow(filter(this_annotation, locus != "IGH")) > 1) {
+                second_light_count <- this_annotation %>% 
+                    filter(locus != "IGH") %>% arrange(desc(count)) %>% 
+                    dplyr::slice(2:2) %>% pull(count)
+            } else {
+                second_light_count <- 0
+            }
+            
+            # other chance to be monoclonal is if the second most abundant H/L 
+            # chain is <10% the counts of the most abundant one
+
+            if ((second_heavy_count <= 0.1 * top_heavy_count) & 
+                (second_light_count <= 0.1 * top_light_count)) {
+                    status <- "monoclonal (<10% subclones)"
+                } else if ((second_heavy_count <= 0.2 * top_heavy_count) & 
+                (second_light_count <= 0.2 * top_light_count)) {
+                    status <- "likely monoclonal (<20% subclones)"
+                } else if (top_heavy_count < 15 | top_light_count < 15) {
+                    status <- "unsure (H or L count <15)"
+                } else {
+                    status <- "not monoclonal"
+                }
+        }
+    
+    # if vector type is nanobody:
+
+    } else if (this_annotation[["vector"]][1] == "nanobody") {
+
+        # if only 1 row, it's monoclonal
+        if (nrow(this_annotation) == 1) {
+            status <- "monoclonal"
+        
+        # otherwise find counts of top/second IGH clone
+        # still filter for IGH just in case there are any non-IGH calls in the nanobody wells
+        } else {
+            top_heavy_count <- this_annotation %>%
+                filter(locus == "IGH") %>% arrange(desc(count)) %>%
+                dplyr::slice(1:1) %>% pull(count)
+
+            if (nrow(this_annotation) > 1) {
+                second_heavy_count <- this_annotation %>%
+                    filter(locus == "IGH") %>% arrange(desc(count)) %>%
+                    dplyr::slice(2:2) %>% pull(count)
+            } else {
+                second_heavy_count <- 0
+            }
+
+            if (second_heavy_count <= 0.1 * top_heavy_count) {
                 status <- "monoclonal (<10% subclones)"
-            } else if ((second_heavy_count <= 0.2 * top_heavy_count) & 
-            (second_light_count <= 0.2 * top_light_count)) {
+            } else if (second_heavy_count <= 0.2 * top_heavy_count) {
                 status <- "likely monoclonal (<20% subclones)"
-            } else if (top_heavy_count < 15 | top_light_count < 15) {
-                status <- "unsure (H or L count <15)"
+            } else if (top_heavy_count < 15) {
+                status <- "unsure (H count <15)"
             } else {
                 status <- "not monoclonal"
             }
+        }
     }
 
+    monoclonal_qc[["vector"]][i] <- this_annotation[["vector"]][1]
     monoclonal_qc[["monoclonal_status"]][i] <- status
+
 }
 
 # now, write things out
 # monoclonal table
 write_csv(monoclonal_qc, "monoclonal_qc.csv")
 
+# annotation table
+# remove vector column from monoclonal_qc for joining
+monoclonal_qc <- monoclonal_qc %>% select(-vector)
+annotation %>% 
+    left_join(monoclonal_qc, by = "well") %>%
+    write_csv("consensus_annotation.csv")
+
 # fasta with all subclones included
 all_subclone_fasta <- annotation %>%
     # create read headers
     mutate(chain = case_when(locus == "IGH" ~ "H", TRUE ~ "L")) %>%
     mutate(read_name = paste0(
-        ">", well, "_", chain, "_count:", count
+        ">", well, "_", vector, "_", chain, "_count:", count
     )) %>%
     # combine read name and seq
     mutate(fasta = paste(read_name, sequence, sep = "\n")) %>%
@@ -308,7 +381,7 @@ amber_corrected_fasta <- annotation %>%
             !is.na(amber_corrected_nt) ~ amber_corrected_nt,
             TRUE ~ sequence)) %>%
     mutate(read_name = paste0(
-        ">", well, "_", chain, "_count:", count, corrected
+        ">", well, "_", vector, "_", chain, "_count:", count, corrected
     )) %>%
     # combine read name and seq
     mutate(fasta = paste(read_name, sequence, sep = "\n")) %>%

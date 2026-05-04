@@ -1,0 +1,53 @@
+# Matchbox script for processing nanobody sequences
+
+# Declare sequences from reference (flanking.csv) to use to extract nanobody sequence
+
+# Nanobody flanking sequences
+nb_flank_L      = args.nb_flank_L
+nb_flank_R      = args.nb_flank_R
+
+if len(read.seq) < 15000 {
+        
+        seqid = args.seqid
+
+        count!('total reads')
+        
+        if read matches [before:_ after:(nb_flank_L _)] => {
+
+                # Count number of reads that match the above pattern (i.e. contain nb_flank_L) and can be rotated
+                count!('rotated')
+
+                # Rotate so that nanobody is at the start of the read sequence
+                rotated = after.concat(before)
+
+                # Extract nanobody sequence
+                if rotated matches [_ nb_flank_L nanobody:_ nb_flank_R _] => {
+                        
+                        # Count number of reads with nanobody sequences
+                        count!('nanobody')
+
+                        # Output nanobody sequences to a file
+                        nanobody.out!('{seqid}_nanobody.fasta')
+
+                        }
+                }
+
+        # For the reverse complement
+        if -read matches [before:_ after:(nb_flank_L _)] => {
+                
+                count!('rc rotated')
+                rotated = after.concat(before)
+                
+                # Extract nanobody sequence
+                if rotated matches [_ nb_flank_L nanobody:_ nb_flank_R _] => {
+                        
+                        # Count number of reads with nanobody sequences
+                        count!('nanobody')
+
+                        # Output nanobody sequences to a file
+                        nanobody.out!('{seqid}_nanobody.fasta')
+
+                        }
+
+                }
+        }

@@ -16,9 +16,10 @@ process riot {
     tuple val(meta), path('*_consensus_annotation.csv'), emit: airr_table
 
     script:
+    def species = meta.vector == 'nanobody' ? 'VICUGNA_PACOS' : 'HOMO_SAPIENS'
 
     """
-    riot_na -f $reads --species HOMO_SAPIENS -p 16 -o "${meta.well}_${pre_post}_consensus_annotation.csv"
+    riot_na -f $reads --species ${species} -p 16 -o "${meta.well}_${meta.vector}_${pre_post}_consensus_annotation.csv"
     """
 }
 
@@ -26,6 +27,7 @@ process riot {
 // for input into preconsensus_group_reads()
 
 process csv_to_tsv {
+    tag "csv_to_tsv"
     label 'process_low'
     publishDir "${params.out_dir}/original_riot", mode: 'copy', pattern: "*_consensus_annotation.tsv"
 
