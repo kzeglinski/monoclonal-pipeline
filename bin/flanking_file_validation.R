@@ -94,4 +94,4 @@ flanks_df <- data.frame(
     sequence = unlist(flanks)
 )
 
-write_csv(flanks_df, "flanking_sequences_for_matchbox.csv")
+write_csv(flanks_df, "flanking_seqs_for_mb.csv")
