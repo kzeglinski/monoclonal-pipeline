@@ -15,7 +15,7 @@ if(!file.exists(sample_sheet_file)){
 sample_sheet <- read_csv(sample_sheet_file, show_col_types = FALSE)
 
 # check all required columns present
-required_columns <- c("barcode", "alias", "cbt_phage_id", "vector")
+required_columns <- c("barcode", "well", "sample_id", "vector")
 missing_columns <- setdiff(required_columns, colnames(sample_sheet))
 
 if(length(missing_columns) > 0){
@@ -42,23 +42,23 @@ if(length(duplicated_barcodes) > 0){
         ". Each barcode must be unique.")
 }
 
-# check all alias values are the correct format (letter from A to H followed by one of 01, 02, ..., 12)
-alias_pattern <- "^[A-H](0[1-9]|1[0-2])$"
-invalid_aliases <- sample_sheet[["alias"]][!grepl(alias_pattern, sample_sheet[["alias"]])]
+# check all well values are the correct format (letter from A to H followed by one of 01, 02, ..., 12)
+well_pattern <- "^[A-H](0[1-9]|1[0-2])$"
+invalid_wells <- sample_sheet[["well"]][!grepl(well_pattern, sample_sheet[["well"]])]
 
-if (length(invalid_aliases) > 0){
-    stop("The 'alias' column contains the following invalid alias(es): ", 
-        paste(invalid_aliases, collapse = ", "),
-        ". Aliases should be in the format of a letter from A to H followed by a number from 01 to 12 (e.g. A01, B01, ..., H12).")
+if (length(invalid_wells) > 0){
+    stop("The 'well' column contains the following invalid well(s): ", 
+        paste(invalid_wells, collapse = ", "),
+        ". Wells should be in the format of a letter from A to H followed by a number from 01 to 12 (e.g. A01, B01, ..., H12).")
 }
 
-# check for duplicate aliases
-duplicated_aliases <- sample_sheet[["alias"]][duplicated(sample_sheet[["alias"]])]
+# check for duplicate wells
+duplicated_wells <- sample_sheet[["well"]][duplicated(sample_sheet[["well"]])]
 
-if(length(duplicated_aliases) > 0){
-    stop("The 'alias' column contains duplicate alias(es): ", 
-        paste(duplicated_aliases, collapse = ", "),
-        ". Each alias must be unique.")
+if(length(duplicated_wells) > 0){
+    stop("The 'well' column contains duplicate well(s): ", 
+        paste(duplicated_wells, collapse = ", "),
+        ". Each well must be unique.")
 }
 
 # check vector column
@@ -79,3 +79,5 @@ if(length(invalid_vector_values) > 0){
         paste(invalid_vector_values, collapse = ", "),
         ". Allowed values are: antibody, nanobody, empty_well, irrelevant_phage.")
 }
+
+write_csv(sample_sheet, "validated_sample_sheet.csv")

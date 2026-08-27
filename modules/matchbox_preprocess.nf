@@ -1,7 +1,7 @@
 process matchbox_preprocess {
     tag { meta.well }
     label 'process_low'
-	publishDir "${params.out_dir}/qc", pattern: "*.tsv",  mode: 'copy', failOnError: true
+	publishDir "${params.out_dir}/sequencing_qc", pattern: "*.tsv",  mode: 'copy', failOnError: true
     container "ghcr.io/kzeglinski/matchbox:0.2.0"
 
 	input:

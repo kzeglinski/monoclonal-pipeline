@@ -42,7 +42,7 @@ if len(read.seq) < 15000 {
                 if rotated matches [_ nb_flank_L nanobody:_ nb_flank_R _] => {
                         
                         # Count number of reads with nanobody sequences
-                        count!('nanobody')
+                        count!('rc nanobody')
 
                         # Output nanobody sequences to a file
                         nanobody.out!('{seqid}_nanobody.fasta')

@@ -10,6 +10,9 @@ process check_sample_sheet {
     input:
     path(sample_sheet)
 
+    output:
+    path("validated_sample_sheet.csv"), emit: validated_sample_sheet
+
     script:
     """
     sample_sheet_validation.R ${sample_sheet}
@@ -76,8 +79,9 @@ workflow parse_sample_sheet{
         fastq_extns = [ '.fastq', '.fastq.gz' , '.fq', '.fq.gz' ]
         // validate sample sheet
         check_sample_sheet(sample_sheet)
+        validated_sample_sheet = check_sample_sheet.out.validated_sample_sheet
 
-        sample_sheet
+        validated_sample_sheet
             .splitCsv(skip: 1, header: false, sep: ',')
             // or is it better to require exactly matching col names?
             .map{row ->
@@ -147,7 +151,6 @@ workflow file_import{
         parsed_sample_sheet = parse_sample_sheet(sample_sheet, fastq_dir)
         samples = parsed_sample_sheet.sample_info_with_reads
         vector_type = parsed_sample_sheet.vector_type
-        vector_type.view()
         flanks = parse_flanking_file(flanking_sequences, vector_type)
     
     emit:

@@ -5,7 +5,7 @@
  */
 include { print_start } from './subworkflows/print_to_console'
 include { file_import } from './subworkflows/file_import'
-include { irrelevant_qc } from './subworkflows/quality_control'
+include { minimap2_qc } from './subworkflows/quality_control'
 include { seqkit_stats } from './subworkflows/quality_control'
 include { post_consensus_qc } from './subworkflows/quality_control'
 include { matchbox_preprocess } from './modules/matchbox_preprocess'
@@ -33,16 +33,15 @@ workflow {
     // TO-DO: PARAMETER VALIDATION
     out_dir = params.out_dir
     fastq_dir = params.fastq_dir
-    sample_sheet = Channel.fromPath(file(params.sample_sheet))
-    igblast_databases = Channel.fromPath(file(params.igblast_databases))
+    sample_sheet = file(params.sample_sheet)
+    igblast_databases = Channel.fromPath(params.igblast_databases)
     annotation_method = params.annotation_method
-
-    // collect is used here to turn these into value channels
-    // this means we can use the one reference file to process many
-    // different fasta inputs
-    flanking_sequences = Channel.fromPath(file(params.flanking_sequences)).collect()
-    irrelevant_reference = Channel.fromPath(file(params.irrelevant_reference)).collect()
-    rotate_sequence = params.rotate_sequence
+    flanking_sequences = file(params.flanking_sequences)
+    irrelevant_reference = params.irrelevant_reference ? file(params.irrelevant_reference) : null
+    antibody_reference = params.antibody_reference ? file(params.antibody_reference) : null
+    nanobody_reference = params.nanobody_reference ? file(params.nanobody_reference) : null
+    rotate_sequence = params.rotate_sequence // ?remove
+    clone_grouping = params.clone_grouping // 'vdj_cdr3' (default) or 'v_cdr3'
 
     // TO-DO: ADD BASECALLING (?)
 
@@ -55,7 +54,7 @@ workflow {
     // basic qc stats 
     all_reads = samples.map{it -> it[1]}.collect()
     qc_stats = seqkit_stats(all_reads)
-    irr_phage_qc = irrelevant_qc(samples, irrelevant_reference)
+    minimap2_qc = minimap2_qc(samples, antibody_reference, nanobody_reference, irrelevant_reference)
 
     // read pre-processing
     // TO-DO: edit process and matchbox script to take into account rotate sequence?

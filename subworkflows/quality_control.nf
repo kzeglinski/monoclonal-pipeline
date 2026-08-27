@@ -2,7 +2,7 @@
 process seqkit_stats {
     tag "qc_stats"
     label 'process_low'
-    publishDir "${params.out_dir}/qc", mode: 'copy'
+    publishDir "${params.out_dir}/sequencing_qc", mode: 'copy'
 
     conda (params.enable_conda ? 'bioconda::seqkit=2.3.1' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -32,8 +32,7 @@ process minimap2_alignment {
         'community.wave.seqera.io/library/minimap2:2.30--dde6b0c5fbc82ebd' }"
 
     input:
-    tuple val(well), val(note), path(reads)
-    path reference
+    tuple val(well), val(vector), path(reads), path(reference)
 
     output:
     tuple val(well), path("*.sam"), emit: alignments
@@ -52,7 +51,7 @@ process minimap2_alignment {
 process alignment_qc{
     tag "$well"
     label 'process_low'
-    publishDir "${params.out_dir}/qc", mode: 'copy'
+    publishDir "${params.out_dir}/sequencing_qc", mode: 'copy'
 
     conda (params.enable_conda ? 'bioconda::samtools=1.22.1' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -79,31 +78,26 @@ process alignment_qc{
     """
 }
 
-workflow irrelevant_qc{
+workflow minimap2_qc {
     take:
         samples
+        antibody_reference
+        nanobody_reference
         irrelevant_reference
 
     main:
-        // specific qc for the irrelevant phage: align it to
-        // the reference and check the coverage
-        samples.map{it -> 
-            def note = it[0].notes
-            def well = it[0].well
-            def reads = it[1]
-            return [well: well, note: note, reads: reads]
-        }
-        .filter(it -> it.note == "irrelevant phage")
-        .set{ irr_phage_samples }
-        
-        // mm2 alignment
-        alignments = minimap2_alignment(irr_phage_samples, irrelevant_reference)
+        routed_samples = samples.map { meta, reads ->
+            def ref =
+                meta.vector == 'antibody' ? antibody_reference :
+                meta.vector == 'nanobody' ? nanobody_reference :
+                meta.vector == 'irrelevant_phage' ? irrelevant_reference :
+                null
 
-        // use samtools to get some qc stats on the alignment
-        irr_phage_qc = alignment_qc(alignments)
-    
-    emit:
-        irr_phage_samples
+            ref ? tuple(meta.well, meta.vector, reads, ref) : null
+        }.filter { it != null }
+
+        antibody_alignments = minimap2_alignment(routed_samples)
+        qc_results = alignment_qc(antibody_alignments)
 }
 
 process post_consensus_qc {
@@ -126,6 +120,15 @@ process post_consensus_qc {
     """
     #!/usr/bin/env Rscript
     library(tidyverse)
+
+    clone_grouping <- "${params.clone_grouping ?: 'vdj_cdr3'}"
+    # options for clone_grouping are 'vdj_cdr3' (default) or 'v_cdr3'
+    
+    grouping_cols <- if (clone_grouping == "vdj_cdr3") {
+        c("well", "locus", "v_call", "d_call", "j_call", "cdr3_aa")
+    } else if (clone_grouping == "v_cdr3") {
+        c("well", "locus", "v_call", "cdr3_aa")
+    }
 
 annotation <- read_tsv(
 
@@ -155,9 +158,10 @@ annotation <- read_tsv(
     # convert all values in 'locus' column to uppercase (riot outputs lowercase)
     mutate(locus = toupper(locus)) %>%
 
-    # collapse those from the same well with same v&j
+    # collapse those from the same well based on clone_grouping param (vdj_cdr3 or v_cdr3)
     # always take the productive one with highest count
-    group_by(well, locus, v_call, cdr3_aa) %>%
+    # and sum the counts
+    group_by(!!!syms(grouping_cols)) %>%
     arrange(desc(productive), desc(count)) %>%
     summarise(
         well = well[1], 

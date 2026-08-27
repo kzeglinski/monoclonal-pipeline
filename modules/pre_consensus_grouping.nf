@@ -1,7 +1,9 @@
 process preconsensus_group_reads {
     tag { meta.well }
     label 'process_low'
-    publishDir "${params.out_dir}/antibody_clone_counts", pattern: "*_antibody_clones.csv", mode: 'copy'
+    publishDir "${params.out_dir}/preconsensus_qc/antibody_clones", mode: 'copy', pattern: "*antibody_clones.tsv"
+    publishDir "${params.out_dir}/preconsensus_qc/productive_counts", mode: 'copy', pattern: "*productive_counts.tsv"
+    publishDir "${params.out_dir}/preconsensus_qc/vdj_combos", mode: 'copy', pattern: "*combos.tsv"
 
     conda (params.enable_conda ? 'conda-forge::r-tidyverse=2.0.0' : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -13,7 +15,7 @@ process preconsensus_group_reads {
 
     output:
     tuple val(meta), path("*_clean.fasta"), emit: consensus_input, optional: true
-    path("*_antibody_clones.csv"), emit: antibody_clone_counts, optional: true
+    path("*.tsv"), emit: preconsensus_qc, optional: true
 
     script:
     """
@@ -26,16 +28,80 @@ process preconsensus_group_reads {
     annotation <- read_tsv(
         fs::dir_ls(glob = "*pre_consensus_annotation.tsv")) %>%
         rename_with(~ "sequence_id", matches("sequence_(id|header)")) %>%
-        select(sequence_id, complete_vdj, v_call, d_call, j_call, sequence) %>%
+        select(sequence_id, locus, productive, complete_vdj, v_call, d_call, j_call, cdr3_aa, sequence) %>%
         # for writing out the fasta later
         mutate(sequence_id = paste0(">", sequence_id)) %>%
         # remove abnormally long sequences, they mess up consensus
         filter(nchar(sequence) < 1000)
+
+    # productive sequence counts
     
+    productive_counts <- annotation %>%
+        group_by(locus, productive) %>%
+        summarise(count = n(), .groups = "drop") %>%
+        filter(!is.na(locus)) %>%
+        complete(locus, productive = c(TRUE, FALSE), fill = list(count = 0)) %>%
+        pivot_wider(names_from = productive, values_from = count, values_fill = 0) %>%
+        mutate(
+            total = `TRUE` + `FALSE`,
+            productive_percent = if_else(total > 0, `TRUE` / total * 100, 0)
+        ) %>%
+        rename(productive = `TRUE`, unproductive = `FALSE`) %>%
+        select(locus, productive, unproductive, total, productive_percent)
+    
+    productive_counts <- productive_counts %>%
+        bind_rows(tibble(locus = "total", productive = sum(productive_counts[["productive"]]), unproductive = sum(productive_counts[["unproductive"]]), total = sum(productive_counts[["total"]]), productive_percent = sum(productive_counts[["productive"]]) / sum(productive_counts[["total"]]) * 100))
+
+    write_tsv(productive_counts, paste0(id, "_productive_counts.tsv"))
+    
+    # vdj combos
+
+    heavy_vdj <- annotation %>%
+        filter(str_detect(locus, regex("igh", ignore_case = TRUE))) %>%
+        group_by(v_call, d_call, j_call, productive) %>%
+        summarise(count = n(), .groups = "drop") %>%
+        arrange(desc(count))
+    
+    write_tsv(heavy_vdj, paste0(id, "_heavy_vdj_combos.tsv"))
+
+    # if vector is antibody, check light chain combos as well
+    if (vector == "antibody") {
+        light_vj <- annotation %>%
+            filter(str_detect(locus, regex("igk|igl", ignore_case = TRUE))) %>%
+            group_by(v_call, j_call, productive) %>%
+            summarise(count = n(), .groups = "drop") %>%
+            arrange(desc(count))
+    
+        write_tsv(light_vj, paste0(id, "_light_vj_combos.tsv"))
+    }
+    
+    # vdj/cdr3 combos
+
+    heavy_vdj_cdr3 <- annotation %>%
+        filter(str_detect(locus, regex("igh", ignore_case = TRUE))) %>%
+        group_by(v_call, d_call, j_call, cdr3_aa, productive) %>%
+        summarise(count = n(), .groups = "drop") %>%
+        arrange(desc(count))
+    
+    write_tsv(heavy_vdj_cdr3, paste0(id, "_heavy_vdj_cdr3_combos.tsv"))
+
+    # if vector is antibody, check light chain combos as well
+    if (vector == "antibody") {
+        light_vj_cdr3 <- annotation %>%
+            filter(str_detect(locus, regex("igk|igl", ignore_case = TRUE))) %>%
+            group_by(v_call, j_call, cdr3_aa, productive) %>%
+            summarise(count = n(), .groups = "drop") %>%
+            arrange(desc(count))
+        
+        write_tsv(light_vj_cdr3, paste0(id, "_light_vj_cdr3_combos.tsv"))
+    }
+
+    # pre-consensus grouping
+
     # only proceed if there are any annotated reads (i.e. has v_call, d_call, and j_call)
     if (nrow(annotation %>% filter(!is.na(v_call) & !is.na(d_call) & !is.na(j_call))) > 0) {
         heavy <- annotation %>%
-            filter(str_detect(v_call, "IGH|VHH|vhh")) %>%
+            filter(str_detect(v_call, regex("IGH|VHH|vhh", ignore_case = TRUE))) %>%
             summarise(
             # count and sequences (fasta format)
             # for reads with the same IGH v/d/j call combo (i.e. belong to the same clone)
@@ -75,7 +141,7 @@ process preconsensus_group_reads {
 
         if (vector != "nanobody") {
             light <- annotation %>%
-                    filter(!str_detect(v_call, "IGH")) %>%
+                    filter(!str_detect(v_call, regex("IGH", ignore_case = TRUE))) %>%
                     summarise(
                         count = n(),
                         reads = paste(sequence_id, sequence, 
@@ -111,14 +177,14 @@ process preconsensus_group_reads {
 
             # get unique heavy v/d/j call combos and assign clone name (v_call + d_call + j_call)
             heavy_clones <- annotation %>%
-                filter(str_detect(v_call, "IGH|VHH|vhh")) %>%
+                filter(str_detect(v_call, regex("IGH|VHH|vhh", ignore_case = TRUE))) %>%
                 select(v_call, d_call, j_call) %>%
                 distinct() %>%
                 mutate(heavy_clone = paste0(v_call, "_", d_call, "_", j_call))
             
             # get unique light v/j call combos and assign clone name (v_call + j_call)
             light_clones <- annotation %>%
-                filter(!str_detect(v_call, "IGH")) %>%
+                filter(!str_detect(v_call, regex("IGH", ignore_case = TRUE))) %>%
                 select(v_call, j_call) %>%
                 distinct() %>%
                 mutate(light_clone = paste0(v_call, "_", j_call))
@@ -149,7 +215,7 @@ process preconsensus_group_reads {
                 ungroup()
             
             # print out the clone combos and their counts to a csv
-            write_csv(clone_combos, paste0(id, "_antibody_clones.csv"))
+            write_tsv(clone_combos, paste0(id, "_antibody_clones.tsv"))
         }
     }
     
